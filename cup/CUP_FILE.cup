@@ -1,0 +1,239 @@
+/*************/
+/* IMPORT(S) */
+/*************/
+import java_cup.runtime.*;
+import ast.*;
+
+parser code 
+{:
+	public Lexer lexer;
+	public static java.io.PrintWriter out;
+
+	public Parser(Lexer lexer)
+	{
+		super(lexer);
+		this.lexer = lexer;
+	}
+	public void report_error(String message, Object info)
+	{
+		int line = lexer.getLine();
+		if (out != null){
+			out.print("ERROR(" + line + ")");
+			out.flush();
+		} else {
+			System.out.println("ERROR(" + line + ")");
+		}	
+		System.exit(0);
+	}
+:}
+
+/************************/
+/* CUSTOMIZE CUP PARSER */
+/************************/
+scan with
+{:
+	Symbol s;
+	s = lexer.next_token();
+
+	if (s.sym == TokenNames.ERROR){
+		if (out != null) {
+			out.print("ERROR");
+			out.close();
+		} else {
+			System.out.println("ERROR");
+		}
+		System.exit(0);
+	}
+
+	return s; 
+:};
+
+/*************/
+/* TERMINALS */
+/*************/
+terminal IF;
+terminal EQ;
+terminal DOT;
+terminal PLUS;
+terminal MINUS;
+terminal TIMES;
+terminal WHILE;
+terminal DIVIDE;
+terminal LPAREN;
+terminal RPAREN;
+terminal LBRACK;
+terminal RBRACK;
+terminal LBRACE;
+terminal RBRACE;
+terminal SEMICOLON;
+terminal ASSIGN;
+terminal COMMA;
+terminal TYPE_INT;
+terminal TYPE_STRING;
+terminal TYPE_VOID;
+terminal LT;
+terminal GT;
+terminal ARRAY;
+terminal CLASS;
+terminal RETURN;
+terminal ELSE;
+terminal NEW;
+terminal EXTENDS;
+terminal NIL;
+terminal ERROR;
+
+/*************/
+/* TERMINALS */
+/*************/
+terminal Integer INT;
+terminal String ID;
+terminal String STRING;
+
+/*****************/
+/* NON TERMINALS */
+/*****************/
+non terminal AstProgram program;
+non terminal AstDec dec;
+non terminal AstType type;
+non terminal AstDec varDec;
+non terminal AstDec funcDec;
+non terminal AstStmtList stmtList;
+non terminal AstDec classDec;
+non terminal AstDec arrayTypedef;
+non terminal AstExp exp;
+non terminal AstExp newExp;
+non terminal AstExpCall callExp;
+non terminal AstVar var;
+non terminal AstStmt stmt;
+
+/**********************/
+/* Maybe change later */
+/**********************/
+
+non terminal AstFuncParamList funcParams;
+non terminal AstFuncParamList moreParams;
+non terminal AstCFieldList cFieldList;
+non terminal AstDec cField;
+non terminal AstExpList callArgs;
+non terminal AstExpList moreCallArgs;
+
+
+/***********************/
+/* OPERATOR PRECEDENCE */
+/***********************/
+precedence left ASSIGN;
+precedence left EQ;
+precedence left LT, GT;
+precedence left PLUS, MINUS;
+precedence left TIMES, DIVIDE;
+precedence left LBRACK;
+precedence left LPAREN;
+precedence left DOT;
+
+/************************/
+/* START WITH: program */
+/************************/
+start with program;
+
+/********************/
+/* DERIVATION RULES */
+/********************/
+
+program		::=		dec:d program:p																{: RESULT = new AstProgram(d, p, dleft+1); :}
+					| dec:d																		{: RESULT = new AstProgram(d, null, dleft+1);:}
+					;
+
+dec			::=		varDec:varDec																{: RESULT = varDec; :}
+					| funcDec:funcDec															{: RESULT = funcDec; :}
+					| classDec:classDec															{: RESULT = classDec; :}
+					| arrayTypedef:arrDec														{: RESULT = arrDec; :}
+					;
+
+type		::=		TYPE_INT:i																	{: RESULT = new AstType("int", ileft+1); :}
+					| TYPE_STRING:s																{: RESULT = new AstType("string", sleft+1); :}
+					| TYPE_VOID:v																{: RESULT = new AstType("void", vleft+1); :}
+					| ID:i																		{: RESULT = new AstType(i, ileft+1); :} 
+					;
+
+varDec		::=		type:t ID:varName ASSIGN exp:e SEMICOLON									{: RESULT = new AstDecVar(t, varName, e, tleft+1); :}
+					| type:t ID:varName SEMICOLON												{: RESULT = new AstDecVar(t, varName, null, tleft+1); :}
+					| type:t ID:varName ASSIGN newExp:newExp SEMICOLON							{: RESULT = new AstDecVar(t, varName, newExp, tleft+1); :}
+					;
+
+funcDec		::=		type:t ID:funcName LPAREN funcParams:funcParams RPAREN LBRACE stmtList:sl RBRACE 	{: RESULT = new AstDecFunc(t, funcName, funcParams, sl, tleft+1); :}
+					;
+
+funcParams	::=		type:t ID:paramName moreParams:ps											{: AstDecVar first = new AstDecVar(t, paramName, null, tleft+1); RESULT = new AstFuncParamList(first, ps, tleft+1);:}
+					| /* empty */																{: RESULT = null; :}
+					;
+
+moreParams	::=		COMMA type:t ID:paramName moreParams:ps										{: AstDecVar p = new AstDecVar(t, paramName, null, tleft+1); RESULT = new AstFuncParamList(p, ps, tleft+1); :}
+					| /* empty */																{: RESULT = null; :}
+					;
+
+stmtList 	::=		stmt:s stmtList:sl															{: RESULT = new AstStmtList(s, sl, sleft+1);   :}
+					| stmt:s																	{: RESULT = new AstStmtList(s, null, sleft+1); :}
+					;
+
+classDec	::=		CLASS ID:i EXTENDS ID:superId LBRACE cFieldList:fields  RBRACE				{: RESULT = new AstDecClass(i, superId, fields, ileft+1); :}
+					| CLASS ID:i LBRACE cFieldList:fields RBRACE								{: RESULT = new AstDecClass(i, null, fields, ileft+1); :}
+					;
+
+cFieldList	::=		cField:f cFieldList:l														{: RESULT = new AstCFieldList(f, l, fleft+1); :}
+					| cField:f																	{: RESULT = new AstCFieldList(f, null, fleft+1); :}
+					;
+
+cField 		::=		varDec:varDec																{: RESULT = varDec; :}
+					| funcDec:funcDec															{: RESULT = funcDec; :}
+					;
+
+arrayTypedef::=		ARRAY ID:arrName EQ type:t LBRACK RBRACK SEMICOLON							{: RESULT = new AstDecArray(arrName, t, arrNameleft+1); :}
+					;
+
+exp			::=		var:v																		{: RESULT = new AstExpVar(v, vleft+1); :}
+					| LPAREN exp:e RPAREN														{: RESULT = e; :}
+					| exp:e1 PLUS exp:e2														{: RESULT = new AstExpBinop(e1,e2,AstExpBinop.PLUS,e1left+1);   :}
+					| exp:e1 MINUS exp:e2														{: RESULT = new AstExpBinop(e1,e2,AstExpBinop.MINUS,e1left+1);  :}
+					| exp:e1 TIMES exp:e2														{: RESULT = new AstExpBinop(e1,e2,AstExpBinop.TIMES,e1left+1);  :}
+					| exp:e1 DIVIDE exp:e2														{: RESULT = new AstExpBinop(e1,e2,AstExpBinop.DIVIDE,e1left+1); :}
+					| exp:e1 LT exp:e2															{: RESULT = new AstExpBinop(e1,e2,AstExpBinop.LT,e1left+1);     :}
+					| exp:e1 GT exp:e2															{: RESULT = new AstExpBinop(e1,e2,AstExpBinop.GT,e1left+1);     :}
+					| exp:e1 EQ exp:e2															{: RESULT = new AstExpBinop(e1,e2,AstExpBinop.EQ,e1left+1);     :}
+					| callExp:callExp															{: RESULT = callExp; :}	
+					| MINUS INT:i																{: RESULT = new AstExpInt(-i, ileft+1); :}
+					| INT:i 																	{: RESULT = new AstExpInt(i, ileft+1); :}
+					| NIL:n																		{: RESULT = new AstExpNil(nleft+1); :}
+					| STRING:s																	{: RESULT = new AstExpString(s, sleft+1); :}
+					;
+
+newExp		::=		NEW type:t																	{: RESULT = new AstExpNew(t ,null, tleft+1); :}																																	
+					| NEW type:t LBRACK exp:e RBRACK											{: RESULT = new AstExpNew(t ,e, tleft+1); :}																
+					;
+
+callExp     ::=     ID:funcName LPAREN callArgs:args RPAREN										{: RESULT = new AstExpCall(null, funcName ,args, funcNameleft+1); :}
+					| var:className DOT ID:funcName LPAREN callArgs:args RPAREN					{: RESULT = new AstExpCall(className, funcName ,args, classNameleft+1); :}
+					;
+
+callArgs    ::=     exp:arg moreCallArgs:as														{: RESULT = new AstExpList(arg, as, argleft+1); :}
+                    | /* empty */																{: RESULT = null; :}
+					;
+
+moreCallArgs ::=	COMMA exp:arg moreCallArgs:args												{: RESULT = new AstExpList(arg, args, argleft+1); :}
+					| /* empty */																{: RESULT = null; :}
+					;
+
+var			::=		ID:name																		{: RESULT = new AstVarSimple(name, nameleft+1); :}
+					| var:v DOT ID:fieldName													{: RESULT = new AstVarField(v, fieldName, vleft+1); :}
+					| var:v LBRACK exp:index RBRACK												{: RESULT = new AstVarSubscript(v, index, vleft+1); :}
+					;
+
+stmt        ::=     varDec:v																								{: RESULT = v; :}											
+                    | var:target ASSIGN exp:value SEMICOLON																	{: RESULT = new AstStmtAssign(target, value, targetleft+1); :}									
+                    | var:target ASSIGN newExp:value SEMICOLON																{: RESULT = new AstStmtAssign(target, value, targetleft+1); :}																									
+                    | RETURN exp:retVal SEMICOLON																			{: RESULT = new AstStmtReturn(retVal, retValleft+1); :}
+					| RETURN:r SEMICOLON																					{: RESULT = new AstStmtReturn(null, rleft+1); :}								
+                    | IF LPAREN exp:cond RPAREN LBRACE stmtList:then_body RBRACE ELSE LBRACE stmtList:else_body	RBRACE		{: RESULT = new AstStmtIf(cond, then_body, else_body, condleft+1); :}
+                    | IF LPAREN exp:cond RPAREN LBRACE stmtList:then_body RBRACE											{: RESULT = new AstStmtIf(cond, then_body, null, condleft+1); :}
+					| WHILE LPAREN exp:cond RPAREN LBRACE stmtList:body RBRACE												{: RESULT = new AstStmtWhile(cond, body, condleft+1); :}
+                    | callExp:c SEMICOLON																					{: RESULT = new AstStmtCall(c, cleft+1); :}
+                    ;
